@@ -102,7 +102,7 @@ jobs:
       - name: start backend
         run: |
           cd server
-          npm start
+          npm start &
       - name: exec cypress
         uses: cypress-io/github-action@v6
         with:
