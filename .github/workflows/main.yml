@@ -79,9 +79,36 @@ jobs:
           name: build
           path: ./client/dist
 
-  test-e2e-frontend:
-    needs: build-frontend
+  build-e2e-frontend:
+    needs: check-frontend
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./client
+    steps:
+      - name: checkout le code
+        uses: actions/checkout@v4
+      - name: installer node.js
+        uses: actions/setup-node@v3
+        with:
+          cache: "npm"
+          cache-dependency-path: ./client/package-lock.json
+      - name: install dependencies
+        run: npm ci --prefer-offline
+      - name: Build application frontend
+        run: npm run build
+      - name: upload build artefact
+        uses: actions/upload-artifact@v3
+        with:
+          name: builde2e
+          path: ./client/dist
+
+  test-e2e-frontend:
+    needs: build-e2e-frontend
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        browser: ["chrome", "edge", "firefox"]
     steps:
       - name: checkout le code
         uses: actions/checkout@v4
@@ -90,18 +117,15 @@ jobs:
         with:
           cache: "npm"
           cache-dependency-path: "**/package-lock.json"
+      - name: load e2e build
+        uses: actions/download-artifact@v3
+        with:
+          name: builde2e
+          path: ./client/dist
       - name: install dependencies
         run: |
           cd server 
           npm ci --prefer-offline
-      - name: install client dependencies
-        run: |
-          cd client
-          npm ci --prefer-offline
-      - name: build frontend
-        run: |
-          cd client
-          npm run build:e2e
       - name: start backend
         run: |
           cd server
@@ -110,18 +134,19 @@ jobs:
         uses: cypress-io/github-action@v6
         with:
           working-directory: ./client
-          browser: chrome
+          browser: ${{ matrix.browser }}
           start: npm run preview
           wait-on: http://localhost:4173
           wait-on-timeout: 60
           config: baseUrl=http://localhost:4173
       - name: Upload coverage reports to Codecov
+        if: matrix.browser == 'chrome'
         uses: codecov/codecov-action@v3
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   deploy:
-    needs: [check-tests-backend, test-e2e-frontend]
+    needs: [check-tests-backend, test-e2e-frontend, build-frontend]
     runs-on: ubuntu-latest
     steps:
       - name: checkout le code !
